@@ -518,19 +518,20 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 彻底放弃借用 CMD_AT_A，使用最普通的 CMD_AT，收到 OK 即刻放行 */
+	/* 终极核心修正：CFA(无UAC)必须使用 1,1 路由到 ttyUSB2。绝对不能用 1,0 (物理I2S)，否则缺乏时钟直接引发DSP和AT串口死锁！ */
 	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // UAC 数字声卡模式
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // CEFAG: UAC数字声卡模式
 	} else {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,0\r"); // CFA 的 ttyUSB2 串口语音流模式
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,1\r"); // CFA: ttyUSB2 虚拟串口语音模式
 	}
+	
 	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 核心修正：只等 OK，绝不卡死队列 */
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 单独发音频路由，不会再死锁了，瞬间返回 OK */
 	cmdsno++;
 
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 真实的拨号动作 */
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 紧接着发拨号指令 */
 	cmdsno++;
 
 	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
@@ -558,18 +559,19 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 
 	if(cpvt->state == CALL_STATE_INCOMING)
 	{
+		/* 同样的，接听时 CFA 也必须用 1,1，杜绝 1,0 */
 		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
 			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
 		} else { 
-			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,0\r"); 
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,1\r"); 
 		}
 		if(err) return -1;
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT); /* 同理：只发配置，只等 OK */
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
 		count++;
 		
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
 		if(err) return -1;
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A); /* 这是真正的接听指令 */
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
 		count++;
 	}
 	else if(cpvt->state == CALL_STATE_WAITING)
