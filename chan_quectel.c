@@ -385,8 +385,8 @@ EXPORT_DEF int opentty (const char* dev, char ** lockfile, int typ)
 		return -1;
 	}
 
-        if (typ == 1) term_attr.c_cflag = B115200 | CS8 | CREAD | CRTSCTS | CLOCAL;
-	else term_attr.c_cflag = B115200 | CS8 | CREAD | CLOCAL;
+        if (typ = 1) term_attr.c_cflag = B115200 | CS8 | CREAD | CRTSCTS | CLOCAL;
+	else term_attr.c_cflag = B115200 | CS8 | CREAD | CRTSCTS;
 	term_attr.c_iflag = 0;
 	term_attr.c_oflag = 0;
 	term_attr.c_lflag = 0;
