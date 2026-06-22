@@ -524,21 +524,33 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_CLIR);
 		cmdsno++;
 	}
-        /* 核心修正：补回针对 EC20CFA (quec_uac=0) 专用的 +QPCMV=1,0 串口音频路由激活指令 */
-        if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-            err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2;D%s;\r", number);
-        } else {
-            err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,0;D%s;\r", number);
-        }
-	if(err)
-	{
-		ast_free(tmp);
-		chan_quectel_err = E_UNKNOWN;
-		return -1;
-	}
+        /* 核心修正：拆分 AT+QPCMV 和 ATD 为独立指令。CFA (R02) 固件解析混合指令会死锁超时 */
+    char * tmp2 = NULL;
+    if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
+        err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2\r");
+    } else {
+        err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,0\r");
+    }
+    if(err)
+    {
+        if(tmp) ast_free(tmp);
+        chan_quectel_err = E_UNKNOWN;
+        return -1;
+    }
+    tmp2 = cmds[cmdsno].data;
+    ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 第一条指令：纯粹发音频路由配置，等待OK */
+    cmdsno++;
 
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
-	cmdsno++;
+    err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
+    if(err)
+    {
+        if(tmp) ast_free(tmp);
+        if(tmp2) ast_free(tmp2);
+        chan_quectel_err = E_UNKNOWN;
+        return -1;
+    }
+    ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 第二条指令：前置动作成功后再发纯净拨号指令 */
+    cmdsno++;
 
 /* on failed ATD this up held call */
 	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
@@ -564,50 +576,53 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
  */
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
-	pvt_t* pvt = cpvt->pvt;
-	at_queue_cmd_t cmds[] = {
-		ATQ_CMD_DECLARE_DYN(CMD_AT_A),
-//		ATQ_CMD_DECLARE_ST(CMD_AT_DDSETEX, cmd_ddsetex2),
-		};\
-	int count = ITEMS_OF(cmds);
-	const char * cmd1;
+    pvt_t* pvt = cpvt->pvt;
+    at_queue_cmd_t cmds[3];
+    int count = 0;
+    int err;
 
-	if(cpvt->state == CALL_STATE_INCOMING)
-	{
-            /* 核心修正：接听时同样为 CFA 模组补回 +QPCMV=1,0 串口音频通路激活 */
-            if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
-                cmd1 = "AT+QPCMV=0;+QPCMV=1,2;A\r"; 
-            } else { 
-                cmd1 = "AT+QPCMV=0;+QPCMV=1,0;A\r"; 
-            }
-	}
-	else if(cpvt->state == CALL_STATE_WAITING)
-	{
-		cmds[0].cmd = CMD_AT_CHLD_2x;
-		cmd1 = "AT+CHLD=2%d\r";
-/* no need CMD_AT_DDSETEX in this case? */
-		count--;
-	}
-	else
-	{
-		ast_log (LOG_ERROR, "[%s] Request answer for call idx %d with state '%s'\n", PVT_ID(cpvt->pvt), cpvt->call_idx, call_state2str(cpvt->state));
-		return -1;
-	}
+    if(cpvt->state == CALL_STATE_INCOMING)
+    {
+        /* 拆分 QPCMV 和 ATA，防止 CFA 旧固件卡死 */
+        if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
+            err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,2\r"); 
+        } else { 
+            err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,0\r"); 
+        }
+        if(err) return -1;
+        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+        count++;
 
-	if (at_fill_generic_cmd(&cmds[0], cmd1, cpvt->call_idx) != 0) {
-		chan_quectel_err = E_UNKNOWN;
-		return -1;
-	}
-	if (at_queue_insert(cpvt, cmds, count, 1) != 0) {
-		chan_quectel_err = E_QUEUE;
-		return -1;
-	}
-             if (pvt->is_simcom) {
+        err = at_fill_generic_cmd(&cmds[count], "ATA\r");
+        if(err) {
+            ast_free(cmds[0].data);
+            return -1;
+        }
+        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
+        count++;
+    }
+    else if(cpvt->state == CALL_STATE_WAITING)
+    {
+        err = at_fill_generic_cmd(&cmds[count], "AT+CHLD=2%d\r", cpvt->call_idx);
+        if(err) return -1;
+        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_CHLD_2x);
+        count++;
+    }
+    else
+    {
+        ast_log (LOG_ERROR, "[%s] Request answer for call idx %d with state '%s'\n", PVT_ID(cpvt->pvt), cpvt->call_idx, call_state2str(cpvt->state));
+        return -1;
+    }
 
-                sleep(1);
-                voice_enable(pvt);
-                                  }
-	return 0;
+    if (at_queue_insert(cpvt, cmds, count, 1) != 0) {
+        chan_quectel_err = E_QUEUE;
+        return -1;
+    }
+    if (pvt->is_simcom) {
+        sleep(1);
+        voice_enable(pvt);
+    }
+    return 0;
 }
 
 /*!
