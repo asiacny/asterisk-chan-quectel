@@ -503,13 +503,9 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	char * tmp = NULL;
 	at_queue_cmd_t cmds[6];
 
-
 	if(PVT_STATE(pvt, chan_count[CALL_STATE_ACTIVE]) > 0 && CPVT_TEST_FLAG(cpvt, CALL_FLAG_HOLD_OTHER))
 	{
 		ATQ_CMD_INIT_ST(cmds[0], CMD_AT_CHLD_2, cmd_chld2);
-/*  enable this cause response_clcc() see all calls are held and insert 'AT+CHLD=2'
-		ATQ_CMD_INIT_ST(cmds[1], CMD_AT_CLCC, cmd_clcc);
-*/
 		cmdsno = 1;
 	}
 
@@ -524,41 +520,29 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_CLIR);
 		cmdsno++;
 	}
-        /* 核心修正：拆分 AT+QPCMV 和 ATD 为独立指令。CFA (R02) 固件解析混合指令会死锁超时 */
-    char * tmp2 = NULL;
-    if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-        err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2\r");
-    } else {
-        err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,0\r");
-    }
-    if(err)
-    {
-        if(tmp) ast_free(tmp);
-        chan_quectel_err = E_UNKNOWN;
-        return -1;
-    }
-    tmp2 = cmds[cmdsno].data;
-    ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 第一条指令：纯粹发音频路由配置，等待OK */
-    cmdsno++;
 
-    err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
-    if(err)
-    {
-        if(tmp) ast_free(tmp);
-        if(tmp2) ast_free(tmp2);
-        chan_quectel_err = E_UNKNOWN;
-        return -1;
-    }
-    ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 第二条指令：前置动作成功后再发纯净拨号指令 */
-    cmdsno++;
+	/* 核心修改：严格区分 UAC 模式与传统 ttyUSB 语音模式 */
+	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
+		// 1. CEFAG (UAC声卡模式): 合并指令，让底层 DSP 强制路由到 ALSA 声卡
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2;D%s;\r", number);
+	} else {
+		// 2. CFA (ttyUSB2模式): 绝对禁止发送 QPCMV 导致硬件时钟死锁，直接发纯净的拨号指令
+		err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
+	}
 
-/* on failed ATD this up held call */
-	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
+	if(err)
+	{
+		if(tmp) ast_free(tmp);
+		chan_quectel_err = E_UNKNOWN;
+		return -1;
+	}
+
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
 	cmdsno++;
 
-/*	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_DDSETEX, cmd_ddsetex2);
-	cmdsno++; */
-
+	/* on failed ATD this up held call */
+	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
+	cmdsno++;
 
 	if (at_queue_insert(cpvt, cmds, cmdsno, 1) != 0) {
 		chan_quectel_err = E_QUEUE;
@@ -576,53 +560,48 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
  */
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
-    pvt_t* pvt = cpvt->pvt;
-    at_queue_cmd_t cmds[3];
-    int count = 0;
-    int err;
+	pvt_t* pvt = cpvt->pvt;
+	at_queue_cmd_t cmds[3];
+	int count = 0;
+	int err;
 
-    if(cpvt->state == CALL_STATE_INCOMING)
-    {
-        /* 拆分 QPCMV 和 ATA，防止 CFA 旧固件卡死 */
-        if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
-            err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,2\r"); 
-        } else { 
-            err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,0\r"); 
-        }
-        if(err) return -1;
-        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
-        count++;
+	if(cpvt->state == CALL_STATE_INCOMING)
+	{
+		/* 核心修改：接听动作同样做严格隔离 */
+		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
+			// CEFAG: 激活 UAC 路由并接听
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,2;A\r"); 
+		} else { 
+			// CFA: 纯净接听
+			err = at_fill_generic_cmd(&cmds[count], "ATA\r"); 
+		}
+		if(err) return -1;
+		
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
+		count++;
+	}
+	else if(cpvt->state == CALL_STATE_WAITING)
+	{
+		err = at_fill_generic_cmd(&cmds[count], "AT+CHLD=2%d\r", cpvt->call_idx);
+		if(err) return -1;
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_CHLD_2x);
+		count++;
+	}
+	else
+	{
+		ast_log (LOG_ERROR, "[%s] Request answer for call idx %d with state '%s'\n", PVT_ID(cpvt->pvt), cpvt->call_idx, call_state2str(cpvt->state));
+		return -1;
+	}
 
-        err = at_fill_generic_cmd(&cmds[count], "ATA\r");
-        if(err) {
-            ast_free(cmds[0].data);
-            return -1;
-        }
-        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
-        count++;
-    }
-    else if(cpvt->state == CALL_STATE_WAITING)
-    {
-        err = at_fill_generic_cmd(&cmds[count], "AT+CHLD=2%d\r", cpvt->call_idx);
-        if(err) return -1;
-        ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_CHLD_2x);
-        count++;
-    }
-    else
-    {
-        ast_log (LOG_ERROR, "[%s] Request answer for call idx %d with state '%s'\n", PVT_ID(cpvt->pvt), cpvt->call_idx, call_state2str(cpvt->state));
-        return -1;
-    }
-
-    if (at_queue_insert(cpvt, cmds, count, 1) != 0) {
-        chan_quectel_err = E_QUEUE;
-        return -1;
-    }
-    if (pvt->is_simcom) {
-        sleep(1);
-        voice_enable(pvt);
-    }
-    return 0;
+	if (at_queue_insert(cpvt, cmds, count, 1) != 0) {
+		chan_quectel_err = E_QUEUE;
+		return -1;
+	}
+	if (pvt->is_simcom) {
+		sleep(1);
+		voice_enable(pvt);
+	}
+	return 0;
 }
 
 /*!
