@@ -135,7 +135,7 @@ static snd_pcm_t *alsa_card_init(char *dev, snd_pcm_stream_t stream,struct pvt *
 		ast_debug(1, "Period size is %d\n", err);
 	}
 
-	buffer_size = 4096 * 2;		/* period_size * 16; */
+	buffer_size = period_size * 4;   // 80 * 4 = 320 帧，延迟仅为 40ms
 	err = snd_pcm_hw_params_set_buffer_size_near(handle, hwparams, &buffer_size);
 	if (err < 0)
 		ast_log(LOG_WARNING, "Problem setting buffer size of %lu: %s\n", buffer_size, snd_strerror(err));
