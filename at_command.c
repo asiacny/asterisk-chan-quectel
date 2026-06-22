@@ -163,7 +163,6 @@ EXPORT_DEF int at_enqueue_initialization(struct cpvt *cpvt, at_cmd_t from_comman
 	int begin = -1;
 	int err;
 	char * ptmp1 = NULL;
-	char * ptmp2 = NULL; /* 新增指针用于音频配置 */
 	pvt_t * pvt = cpvt->pvt;
 	at_queue_cmd_t cmds[ITEMS_OF(st_cmds)];
 
@@ -186,19 +185,6 @@ EXPORT_DEF int at_enqueue_initialization(struct cpvt *cpvt, at_cmd_t from_comman
 			ptmp1 = cmds[out].data;
 		}
 
-		/* ======== 核心修正：在模块闲置启动时，提前强制打通音频路由 ======== */
-		if(cmds[out].cmd == CMD_AT_CVOICE)
-		{
-			if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-				err = at_fill_generic_cmd(&cmds[out], "AT+QPCMV=1,2\r"); // CEFAG: 数字声卡
-			} else {
-				err = at_fill_generic_cmd(&cmds[out], "AT+QPCMV=1,1\r"); // CFA: 虚拟串口语音
-			}
-			if(err) goto failure;
-			ptmp2 = cmds[out].data;
-		}
-		/* ==================================================================== */
-
 		if(cmds[out].cmd == from_command) begin = out;
 		out++;
 	}
@@ -207,7 +193,6 @@ EXPORT_DEF int at_enqueue_initialization(struct cpvt *cpvt, at_cmd_t from_comman
 	return 0;
 failure:
 	if(ptmp1) ast_free(ptmp1);
-	if(ptmp2) ast_free(ptmp2);
 	return err;
 }
 
@@ -494,7 +479,7 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	int err;
 	int cmdsno = 0;
 	char * tmp = NULL;
-	at_queue_cmd_t cmds[4];
+	at_queue_cmd_t cmds[6];
 
 	if(PVT_STATE(pvt, chan_count[CALL_STATE_ACTIVE]) > 0 && CPVT_TEST_FLAG(cpvt, CALL_FLAG_HOLD_OTHER))
 	{
@@ -511,10 +496,18 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 极简拨号：绝不在此发送音频指令触发基带 Bug */
+	/* 核心逻辑：CFA (quec_uac=0) 只发送 AT+QPCMV=0 禁用外部 PCM，音频即可自动从 ttyUSB2 吐出 */
+	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // UAC声卡模式
+	} else {
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0\r");   // ttyUSB2 虚拟串口模式
+	}
+	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); 
+	cmdsno++;
+
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
-
 	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
 	cmdsno++;
 
@@ -534,13 +527,21 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
 	pvt_t* pvt = cpvt->pvt;
-	at_queue_cmd_t cmds[2];
+	at_queue_cmd_t cmds[3];
 	int count = 0;
 	int err;
 
 	if(cpvt->state == CALL_STATE_INCOMING)
 	{
-		/* 极简接听：绝不在此发送音频指令触发基带 Bug */
+		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
+		} else { 
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0\r"); 
+		}
+		if(err) return -1;
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+		count++;
+		
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
 		if(err) return -1;
 		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
