@@ -521,26 +521,23 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 终极修正：严格按照移远手册精准下发，杜绝任何引发 ERROR 的不支持指令 */
+	/* 核心修改：精准发送移远原生指令，且借用 CMD_AT_A 的长等待机制，防止 300ms 超时 */
 	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		// CEFAG (UAC模式) -> 路由到ALSA数字声卡
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r");
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // CEFAG UAC
 	} else {
-		// CFA (无UAC模式) -> 路由到 /dev/ttyUSB2 虚拟语音串口
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,1\r");
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,0\r"); // CFA ttyUSB2
 	}
-	
 	if(err)
 	{
 		if(tmp) ast_free(tmp);
 		chan_quectel_err = E_UNKNOWN;
 		return -1;
 	}
-	
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 单独发送音频路由，等待 OK */
+	/* 关键：使用 CMD_AT_A 而不是 CMD_AT。这会让系统给足模块切换音频的时间，彻底根除 timedout！ */
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_A); 
 	cmdsno++;
 
-	/* 收到音频路由成功的 OK 后，再发送纯净的拨号指令 */
+	/* 音频通道长超时打通后，发送纯净的拨号指令 */
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err)
 	{
@@ -552,7 +549,6 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
 	cmdsno++;
 
-	/* on failed ATD this up held call */
 	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
 	cmdsno++;
 
@@ -560,7 +556,6 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		chan_quectel_err = E_QUEUE;
 		return -1;
 	}
-	/* set CALL_FLAG_NEED_HANGUP early because ATD may be still in queue while local hangup called */
 	CPVT_SET_FLAGS(cpvt, CALL_FLAG_NEED_HANGUP);
 	return 0;
 }
@@ -582,10 +577,12 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
 			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
 		} else { 
-			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,1\r"); 
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,0\r"); 
 		}
 		if(err) return -1;
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+		
+		/* 同样借用 CMD_AT_A 赋予长超时 */
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
 		count++;
 		
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
