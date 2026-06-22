@@ -112,109 +112,102 @@ EXPORT_DEF int at_enqueue_initialization(struct cpvt *cpvt, at_cmd_t from_comman
 {
 	static const char cmd2[] = "AT^DSCI=1\r";
 	static const char cmd3[] = "ATE0\r";
-
 	static const char cmd5[] = "AT+CGMI\r";
 	static const char cmd6[] = "AT+CSCA?\r";
 	static const char cmd7[] = "AT+CGMM\r";
 	static const char cmd8[] = "AT+CGMR\r";
-
 	static const char cmd9[] = "AT+CMEE=0\r";
 	static const char cmd10[] = "AT+CGSN\r";
 	static const char cmd11[] = "AT+CIMI\r";
 	static const char cmd12[] = "AT+CPIN?\r";
-
 	static const char cmd13[] = "AT+COPS=0,0\r";
 	static const char cmd14[] = "AT+CREG=2\r";
 	static const char cmd15[] = "AT+CREG?\r";
 	static const char cmd16[] = "AT+CNUM\r";
-
 	static const char cmd17[] = "AT+QPCMV?\r";
 	static const char cmd17a[] = "AT+CPCMREG?\r";
-//	static const char cmd18[] = "AT+CLIP=0\r";
 	static const char cmd19[] = "AT+CSSN=1,1\r";
 	static const char cmd20[] = "AT+CMGF=0\r";
 	static const char cmd21[] = "AT+CSCS=\"UCS2\"\r";
-
 	static const char cmd22[] = "AT+CPMS=\"SM\",\"SM\",\"SM\"\r";
 	static const char cmd23[] = "AT+CNMI=2,1,0,2,0\r";
 	static const char cmd24[] = "AT+CSQ\r";
 
 	static const at_queue_cmd_t st_cmds[] = {
 		ATQ_CMD_DECLARE_ST(CMD_AT, cmd_at),
-		ATQ_CMD_DECLARE_ST(CMD_AT_Z, cmd2),		/* optional,  reload configuration */
-		ATQ_CMD_DECLARE_ST(CMD_AT_E, cmd3),		/* disable echo */
-		ATQ_CMD_DECLARE_DYN(CMD_AT_U2DIAG),		/* optional, Enable or disable some devices */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CGMI, cmd5),		/* Getting manufacturer info */
-
-		ATQ_CMD_DECLARE_ST(CMD_AT_CGMM, cmd7),		/* Get Product name */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CGMR, cmd8),		/* Get software version */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CMEE, cmd9),		/* set MS Error Report to 'ERROR' only  TODO: change to 1 or 2 and add support in response handlers */
-
-		ATQ_CMD_DECLARE_ST(CMD_AT_CGSN, cmd10),		/* IMEI Read */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CIMI, cmd11),		/* IMSI Read */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CPIN, cmd12),		/* check is password authentication requirement and the remainder validation times */
-		ATQ_CMD_DECLARE_ST(CMD_AT_COPS_INIT, cmd13),	/* Read operator name */
-
-		ATQ_CMD_DECLARE_STI(CMD_AT_CREG_INIT,cmd14),	/* GSM registration status setting */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CREG, cmd15),		/* GSM registration status */
-		ATQ_CMD_DECLARE_STI(CMD_AT_CNUM, cmd16),		/* Get Subscriber number */
-		ATQ_CMD_DECLARE_STI(CMD_AT_CVOICE, cmd17),	/* read the current voice mode, and return sampling rate、data bit、frame period */
+		ATQ_CMD_DECLARE_ST(CMD_AT_Z, cmd2),
+		ATQ_CMD_DECLARE_ST(CMD_AT_E, cmd3),
+		ATQ_CMD_DECLARE_DYN(CMD_AT_U2DIAG),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CGMI, cmd5),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CGMM, cmd7),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CGMR, cmd8),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CMEE, cmd9),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CGSN, cmd10),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CIMI, cmd11),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CPIN, cmd12),
+		ATQ_CMD_DECLARE_ST(CMD_AT_COPS_INIT, cmd13),
+		ATQ_CMD_DECLARE_STI(CMD_AT_CREG_INIT,cmd14),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CREG, cmd15),
+		ATQ_CMD_DECLARE_STI(CMD_AT_CNUM, cmd16),
+		ATQ_CMD_DECLARE_STI(CMD_AT_CVOICE, cmd17),
 		ATQ_CMD_DECLARE_STI(CMD_AT_CVOICE2, cmd17a),
-		ATQ_CMD_DECLARE_ST(CMD_AT_CSCA, cmd6),		/* Get SMS Service center address */
-//		ATQ_CMD_DECLARE_ST(CMD_AT_CLIP, cmd18),		/* disable  Calling line identification presentation in unsolicited response +CLIP: <number>,<type>[,<subaddr>,<satype>[,[<alpha>][,<CLI validitity>]] */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CSSN, cmd19),		/* activate Supplementary Service Notification with CSSI and CSSU */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CMGF, cmd20),		/* Set Message Format */
-
- 		ATQ_CMD_DECLARE_STI(CMD_AT_CSCS, cmd21),	/* UCS-2 text encoding */
-
-		ATQ_CMD_DECLARE_ST(CMD_AT_CPMS, cmd22),		/* SMS Storage Selection */
-			/* pvt->initialized = 1 after successful of CMD_AT_CNMI */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CNMI, cmd23),		/* New SMS Notification Setting +CNMI=[<mode>[,<mt>[,<bm>[,<ds>[,<bfr>]]]]] */
-		ATQ_CMD_DECLARE_ST(CMD_AT_CSQ, cmd24),		/* Query Signal quality */
+		ATQ_CMD_DECLARE_ST(CMD_AT_CSCA, cmd6),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CSSN, cmd19),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CMGF, cmd20),
+ 		ATQ_CMD_DECLARE_STI(CMD_AT_CSCS, cmd21),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CPMS, cmd22),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CNMI, cmd23),
+		ATQ_CMD_DECLARE_ST(CMD_AT_CSQ, cmd24),
 		};
 	unsigned in, out;
 	int begin = -1;
 	int err;
 	char * ptmp1 = NULL;
+	char * ptmp2 = NULL; /* 新增指针用于音频配置 */
 	pvt_t * pvt = cpvt->pvt;
 	at_queue_cmd_t cmds[ITEMS_OF(st_cmds)];
 
-	/* customize list */
 	for(in = out = 0; in < ITEMS_OF(st_cmds); in++)
 	{
-		if(begin == -1)
-		{
-			if(st_cmds[in].cmd == from_command)
-				begin = in;
-			else
-				continue;
+		if(begin == -1) {
+			if(st_cmds[in].cmd == from_command) begin = in;
+			else continue;
 		}
 
-		if(st_cmds[in].cmd == CMD_AT_Z && !CONF_SHARED(pvt, resetquectel))
-			continue;
-		if(st_cmds[in].cmd == CMD_AT_U2DIAG && CONF_SHARED(pvt, u2diag) == -1)
-			continue;
+		if(st_cmds[in].cmd == CMD_AT_Z && !CONF_SHARED(pvt, resetquectel)) continue;
+		if(st_cmds[in].cmd == CMD_AT_U2DIAG && CONF_SHARED(pvt, u2diag) == -1) continue;
 
 		memcpy(&cmds[out], &st_cmds[in], sizeof(st_cmds[in]));
 
 		if(cmds[out].cmd == CMD_AT_U2DIAG)
 		{
 			err = at_fill_generic_cmd(&cmds[out], "AT^U2DIAG=%d\r", CONF_SHARED(pvt, u2diag));
-			if(err)
-				goto failure;
+			if(err) goto failure;
 			ptmp1 = cmds[out].data;
 		}
-		if(cmds[out].cmd == from_command)
-			begin = out;
+
+		/* ======== 核心修正：在模块闲置启动时，提前强制打通音频路由 ======== */
+		if(cmds[out].cmd == CMD_AT_CVOICE)
+		{
+			if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
+				err = at_fill_generic_cmd(&cmds[out], "AT+QPCMV=1,2\r"); // CEFAG: 数字声卡
+			} else {
+				err = at_fill_generic_cmd(&cmds[out], "AT+QPCMV=1,1\r"); // CFA: 虚拟串口语音
+			}
+			if(err) goto failure;
+			ptmp2 = cmds[out].data;
+		}
+		/* ==================================================================== */
+
+		if(cmds[out].cmd == from_command) begin = out;
 		out++;
 	}
 
-	if(out > 0)
-		return at_queue_insert(cpvt, cmds, out, 0);
+	if(out > 0) return at_queue_insert(cpvt, cmds, out, 0);
 	return 0;
 failure:
-	if(ptmp1)
-		ast_free(ptmp1);
+	if(ptmp1) ast_free(ptmp1);
+	if(ptmp2) ast_free(ptmp2);
 	return err;
 }
 
@@ -501,7 +494,7 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	int err;
 	int cmdsno = 0;
 	char * tmp = NULL;
-	at_queue_cmd_t cmds[6];
+	at_queue_cmd_t cmds[4];
 
 	if(PVT_STATE(pvt, chan_count[CALL_STATE_ACTIVE]) > 0 && CPVT_TEST_FLAG(cpvt, CALL_FLAG_HOLD_OTHER))
 	{
@@ -518,29 +511,17 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 终极核心修正：CFA(无UAC)必须使用 1,1 路由到 ttyUSB2。绝对不能用 1,0 (物理I2S)，否则缺乏时钟直接引发DSP和AT串口死锁！ */
-	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // CEFAG: UAC数字声卡模式
-	} else {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,1\r"); // CFA: ttyUSB2 虚拟串口语音模式
-	}
-	
-	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 单独发音频路由，不会再死锁了，瞬间返回 OK */
-	cmdsno++;
-
+	/* 极简拨号：绝不在此发送音频指令触发基带 Bug */
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 紧接着发拨号指令 */
+
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
 	cmdsno++;
 
 	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
 	cmdsno++;
 
-	if (at_queue_insert(cpvt, cmds, cmdsno, 1) != 0) {
-		chan_quectel_err = E_QUEUE;
-		return -1;
-	}
+	if (at_queue_insert(cpvt, cmds, cmdsno, 1) != 0) { chan_quectel_err = E_QUEUE; return -1; }
 	CPVT_SET_FLAGS(cpvt, CALL_FLAG_NEED_HANGUP);
 	return 0;
 }
@@ -553,22 +534,13 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
 	pvt_t* pvt = cpvt->pvt;
-	at_queue_cmd_t cmds[3];
+	at_queue_cmd_t cmds[2];
 	int count = 0;
 	int err;
 
 	if(cpvt->state == CALL_STATE_INCOMING)
 	{
-		/* 同样的，接听时 CFA 也必须用 1,1，杜绝 1,0 */
-		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
-			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
-		} else { 
-			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,1\r"); 
-		}
-		if(err) return -1;
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
-		count++;
-		
+		/* 极简接听：绝不在此发送音频指令触发基带 Bug */
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
 		if(err) return -1;
 		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
@@ -587,14 +559,8 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 		return -1;
 	}
 
-	if (at_queue_insert(cpvt, cmds, count, 1) != 0) {
-		chan_quectel_err = E_QUEUE;
-		return -1;
-	}
-	if (pvt->is_simcom) {
-		sleep(1);
-		voice_enable(pvt);
-	}
+	if (at_queue_insert(cpvt, cmds, count, 1) != 0) { chan_quectel_err = E_QUEUE; return -1; }
+	if (pvt->is_simcom) { sleep(1); voice_enable(pvt); }
 	return 0;
 }
 
