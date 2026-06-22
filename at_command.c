@@ -512,41 +512,25 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	if(clir != -1)
 	{
 		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+CLIR=%d\r", clir);
-		if (err) {
-			chan_quectel_err = E_UNKNOWN;
-			return -1;
-		}
+		if (err) { chan_quectel_err = E_UNKNOWN; return -1; }
 		tmp = cmds[cmdsno].data;
 		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_CLIR);
 		cmdsno++;
 	}
 
-	/* 核心修改：精准发送移远原生指令，且借用 CMD_AT_A 的长等待机制，防止 300ms 超时 */
+	/* 彻底放弃借用 CMD_AT_A，使用最普通的 CMD_AT，收到 OK 即刻放行 */
 	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // CEFAG UAC
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r"); // UAC 数字声卡模式
 	} else {
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,0\r"); // CFA ttyUSB2
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,0\r"); // CFA 的 ttyUSB2 串口语音流模式
 	}
-	if(err)
-	{
-		if(tmp) ast_free(tmp);
-		chan_quectel_err = E_UNKNOWN;
-		return -1;
-	}
-	/* 关键：使用 CMD_AT_A 而不是 CMD_AT。这会让系统给足模块切换音频的时间，彻底根除 timedout！ */
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_A); 
+	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 核心修正：只等 OK，绝不卡死队列 */
 	cmdsno++;
 
-	/* 音频通道长超时打通后，发送纯净的拨号指令 */
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
-	if(err)
-	{
-		if(tmp) ast_free(tmp);
-		chan_quectel_err = E_UNKNOWN;
-		return -1;
-	}
-
-	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D);
+	if(err) { if(tmp) ast_free(tmp); chan_quectel_err = E_UNKNOWN; return -1; }
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_D); /* 真实的拨号动作 */
 	cmdsno++;
 
 	ATQ_CMD_INIT_ST(cmds[cmdsno], CMD_AT_CLCC, cmd_clcc);
@@ -580,14 +564,12 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,0\r"); 
 		}
 		if(err) return -1;
-		
-		/* 同样借用 CMD_AT_A 赋予长超时 */
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT); /* 同理：只发配置，只等 OK */
 		count++;
 		
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
 		if(err) return -1;
-		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A); /* 这是真正的接听指令 */
 		count++;
 	}
 	else if(cpvt->state == CALL_STATE_WAITING)
