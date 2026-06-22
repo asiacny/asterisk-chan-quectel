@@ -136,7 +136,7 @@ static snd_pcm_t *alsa_card_init(char *dev, snd_pcm_stream_t stream,struct pvt *
 		ast_debug(1, "Period size is %d\n", err);
 	}
 
-	/ 【优化为】：让总缓冲大小等于 8 个周期（20ms * 8 = 160ms 总缓冲延迟）
+	// 【优化为】：让总缓冲大小等于 8 个周期（20ms * 8 = 160ms 总缓冲延迟）
 	// 这样既把总延迟死死锁在 160ms 极低电平内，又给 CPU 腾出了整整 8 个周期的超长安全防护垫，爆破声彻底烟消云散！
 	buffer_size = period_size * 8;
 	err = snd_pcm_hw_params_set_buffer_size_near(handle, hwparams, &buffer_size);
