@@ -365,6 +365,10 @@ static char* cli_show_device_statistics (struct ast_cli_entry* e, int cmd, struc
 }
 
 
+/* 引入双层宏，强行把任何传入的裸文本标记安全转化为标准的 C 语言字符串字面量 */
+#define PRE_TO_STR(x) #x
+#define MACRO_TO_STR(x) PRE_TO_STR(x)
+
 static char* cli_show_version (struct ast_cli_entry* e, int cmd, struct ast_cli_args* a)
 {
 	switch (cmd)
@@ -384,9 +388,10 @@ static char* cli_show_version (struct ast_cli_entry* e, int cmd, struct ast_cli_
 		return CLI_SHOWUSAGE;
 	}
 
-	/* 核心修改：直接拼入我们在 Makefile 里动态生成的 CHAN_QUECTEL_BUILD_TIME */
-	ast_cli (a->fd, "\n%s: %s, Version %s, Revision %s [ Build: " CHAN_QUECTEL_BUILD_TIME " ]\nProject Home: %s\nBug Reporting: %s\n\n", 
-		AST_MODULE, MODULE_DESCRIPTION, MODULE_VERSION, PACKAGE_REVISION, MODULE_URL, MODULE_BUGREPORT);
+	/* 核心修改：利用 MACRO_TO_STR 将 Makefile 传入的 Build_xxxxxxxx 变为 "Build_xxxxxxxx" */
+	ast_cli (a->fd, "\n%s: %s, Version %s, Revision %s [ %s ]\nProject Home: %s\nBug Reporting: %s\n\n", 
+		AST_MODULE, MODULE_DESCRIPTION, MODULE_VERSION, PACKAGE_REVISION, 
+		MACRO_TO_STR(CHAN_QUECTEL_BUILD_TAG), MODULE_URL, MODULE_BUGREPORT);
 
 	return CLI_SUCCESS;
 }
