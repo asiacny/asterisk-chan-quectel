@@ -524,11 +524,11 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT_CLIR);
 		cmdsno++;
 	}
-        /* 纯净化重构：去掉不稳定的 is_simcom 判断，只对 UAC 模组下发通道切换，非 UAC 传统串口模组一律采用标准原厂外呼 */
+        /* 核心修正：补回针对 EC20CFA (quec_uac=0) 专用的 +QPCMV=1,0 串口音频路由激活指令 */
         if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
             err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2;D%s;\r", number);
         } else {
-            err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
+            err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,0;D%s;\r", number);
         }
 	if(err)
 	{
@@ -574,11 +574,11 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 
 	if(cpvt->state == CALL_STATE_INCOMING)
 	{
-            /* 纯净化重构：防止传统串口模组在接听来电时同样因 CPCMREG 超时导致断线闪退 */
+            /* 核心修正：接听时同样为 CFA 模组补回 +QPCMV=1,0 串口音频通路激活 */
             if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
                 cmd1 = "AT+QPCMV=0;+QPCMV=1,2;A\r"; 
             } else { 
-                cmd1 = "ATA\r"; 
+                cmd1 = "AT+QPCMV=0;+QPCMV=1,0;A\r"; 
             }
 	}
 	else if(cpvt->state == CALL_STATE_WAITING)
