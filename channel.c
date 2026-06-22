@@ -365,12 +365,13 @@ static void activate_call(struct cpvt* cpvt)
 		// FIXME: reset possition?
 		if (strcmp(CONF_UNIQ(pvt, quec_uac),"1") != 0) mixb_attach(&pvt->a_write_mixb, &cpvt->mixstream);
                 else {
-                /* 【终极破除Capture延迟Bug】：在通话通道建立并激活的瞬间，
-                   不管设备之前是不是 RUNNING，直接强行把里面排队和堆积的历史陈旧语音裸流全部倒掉！ */
-                snd_pcm_drop(pvt->icard);    // 强行丢弃积压的“过去的声音”
-                snd_pcm_prepare(pvt->icard); // 重新使能并格式化硬件状态机
-                snd_pcm_start(pvt->icard);   // 毫秒级对齐，真正实时启动录音
-        }                
+	        snd_pcm_state_t state;
+	        state = snd_pcm_state(pvt->icard);
+	        if ((state != SND_PCM_STATE_PREPARED) && (state != SND_PCM_STATE_RUNNING)) {
+                snd_pcm_prepare(pvt->icard);
+                snd_pcm_start(pvt->icard);
+                                                                                            }
+                      }                
 //		rb_init (&cpvt->a_write_rb, cpvt->a_write_buf, sizeof (cpvt->a_write_buf));
 //		cpvt->write = pvt->a_write_rb.write;
 //		cpvt->used = pvt->a_write_rb.used;
