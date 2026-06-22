@@ -20,7 +20,7 @@
 #define AT_COMMANDS_TABLE(_) \
 	_( USER,            "USER'S") \
 	_( AT,              "AT") \
-	_( AT_A,            "at+qpcmv=0;+qpcmv=1,0;a") \
+	_( AT_A,            "ATA") \
 	_( AT_CCWA_STATUS,  "AT+CCWA?") \
 	_( AT_CCWA_SET,     "AT+CCWA=") \
 	_( AT_CFUN,         "AT+CFUN") \
