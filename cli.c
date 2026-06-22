@@ -384,7 +384,9 @@ static char* cli_show_version (struct ast_cli_entry* e, int cmd, struct ast_cli_
 		return CLI_SHOWUSAGE;
 	}
 
-	ast_cli (a->fd, "\n%s: %s, Version %s, Revision %s\nProject Home: %s\nBug Reporting: %s\n\n", AST_MODULE, MODULE_DESCRIPTION, MODULE_VERSION, PACKAGE_REVISION, MODULE_URL, MODULE_BUGREPORT);
+	/* 核心修改：利用 GCC 原生 __DATE__ 和 __TIME__ 宏，在编译瞬间自动注入精确到秒的系统时间 */
+	ast_cli (a->fd, "\n%s: %s, Version %s, Revision %s [ Build: " __DATE__ " " __TIME__ " ]\nProject Home: %s\nBug Reporting: %s\n\n", 
+		AST_MODULE, MODULE_DESCRIPTION, MODULE_VERSION, PACKAGE_REVISION, MODULE_URL, MODULE_BUGREPORT);
 
 	return CLI_SUCCESS;
 }
