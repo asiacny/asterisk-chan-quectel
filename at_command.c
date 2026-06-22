@@ -501,7 +501,7 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	int err;
 	int cmdsno = 0;
 	char * tmp = NULL;
-	at_queue_cmd_t cmds[8];
+	at_queue_cmd_t cmds[6];
 
 	if(PVT_STATE(pvt, chan_count[CALL_STATE_ACTIVE]) > 0 && CPVT_TEST_FLAG(cpvt, CALL_FLAG_HOLD_OTHER))
 	{
@@ -521,29 +521,26 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 核心修改：双保险开启 USB 串口数字音频流，且忽略因固件差异引发的 ERROR */
+	/* 终极修正：严格按照移远手册精准下发，杜绝任何引发 ERROR 的不支持指令 */
 	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		// UAC 模式路由到 ALSA
+		// CEFAG (UAC模式) -> 路由到ALSA数字声卡
 		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r");
-		if(err) { if(tmp) ast_free(tmp); return -1; }
-		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
-		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
-		cmdsno++;
 	} else {
-		// CFA 非 UAC 模式：开启串口语音流
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+CPCMREG=1\r");
-		if(err) { if(tmp) ast_free(tmp); return -1; }
-		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
-		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
-		cmdsno++;
-
+		// CFA (无UAC模式) -> 路由到 /dev/ttyUSB2 虚拟语音串口
 		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,1\r");
-		if(err) { if(tmp) ast_free(tmp); return -1; }
-		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
-		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
-		cmdsno++;
 	}
+	
+	if(err)
+	{
+		if(tmp) ast_free(tmp);
+		chan_quectel_err = E_UNKNOWN;
+		return -1;
+	}
+	
+	ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT); /* 单独发送音频路由，等待 OK */
+	cmdsno++;
 
+	/* 收到音频路由成功的 OK 后，再发送纯净的拨号指令 */
 	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err)
 	{
@@ -576,7 +573,7 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
 	pvt_t* pvt = cpvt->pvt;
-	at_queue_cmd_t cmds[4];
+	at_queue_cmd_t cmds[3];
 	int count = 0;
 	int err;
 
@@ -584,23 +581,12 @@ EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 	{
 		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
 			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
-			if(err) return -1;
-			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
-			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
-			count++;
 		} else { 
-			err = at_fill_generic_cmd(&cmds[count], "AT+CPCMREG=1\r"); 
-			if(err) return -1;
-			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
-			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
-			count++;
-			
 			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,1\r"); 
-			if(err) return -1;
-			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
-			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
-			count++;
 		}
+		if(err) return -1;
+		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+		count++;
 		
 		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
 		if(err) return -1;
