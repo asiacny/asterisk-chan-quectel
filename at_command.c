@@ -501,7 +501,7 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 	int err;
 	int cmdsno = 0;
 	char * tmp = NULL;
-	at_queue_cmd_t cmds[6];
+	at_queue_cmd_t cmds[8];
 
 	if(PVT_STATE(pvt, chan_count[CALL_STATE_ACTIVE]) > 0 && CPVT_TEST_FLAG(cpvt, CALL_FLAG_HOLD_OTHER))
 	{
@@ -521,15 +521,30 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 		cmdsno++;
 	}
 
-	/* 核心修改：严格区分 UAC 模式与传统 ttyUSB 语音模式 */
+	/* 核心修改：双保险开启 USB 串口数字音频流，且忽略因固件差异引发的 ERROR */
 	if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) {
-		// 1. CEFAG (UAC声卡模式): 合并指令，让底层 DSP 强制路由到 ALSA 声卡
-		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=0;+QPCMV=1,2;D%s;\r", number);
+		// UAC 模式路由到 ALSA
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,2\r");
+		if(err) { if(tmp) ast_free(tmp); return -1; }
+		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
+		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
+		cmdsno++;
 	} else {
-		// 2. CFA (ttyUSB2模式): 绝对禁止发送 QPCMV 导致硬件时钟死锁，直接发纯净的拨号指令
-		err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
+		// CFA 非 UAC 模式：开启串口语音流
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+CPCMREG=1\r");
+		if(err) { if(tmp) ast_free(tmp); return -1; }
+		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
+		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
+		cmdsno++;
+
+		err = at_fill_generic_cmd(&cmds[cmdsno], "AT+QPCMV=1,1\r");
+		if(err) { if(tmp) ast_free(tmp); return -1; }
+		ATQ_CMD_INIT_DYNI(cmds[cmdsno], CMD_AT);
+		cmds[cmdsno].flags |= ATQ_CMD_FLAG_IGNORE;
+		cmdsno++;
 	}
 
+	err = at_fill_generic_cmd(&cmds[cmdsno], "ATD%s;\r", number);
 	if(err)
 	{
 		if(tmp) ast_free(tmp);
@@ -561,22 +576,34 @@ EXPORT_DEF int at_enqueue_dial(struct cpvt *cpvt, const char *number, int clir)
 EXPORT_DEF int at_enqueue_answer(struct cpvt *cpvt)
 {
 	pvt_t* pvt = cpvt->pvt;
-	at_queue_cmd_t cmds[3];
+	at_queue_cmd_t cmds[4];
 	int count = 0;
 	int err;
 
 	if(cpvt->state == CALL_STATE_INCOMING)
 	{
-		/* 核心修改：接听动作同样做严格隔离 */
 		if (strcmp(CONF_UNIQ(pvt, quec_uac), "1") == 0) { 
-			// CEFAG: 激活 UAC 路由并接听
-			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=0;+QPCMV=1,2;A\r"); 
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,2\r"); 
+			if(err) return -1;
+			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
+			count++;
 		} else { 
-			// CFA: 纯净接听
-			err = at_fill_generic_cmd(&cmds[count], "ATA\r"); 
+			err = at_fill_generic_cmd(&cmds[count], "AT+CPCMREG=1\r"); 
+			if(err) return -1;
+			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
+			count++;
+			
+			err = at_fill_generic_cmd(&cmds[count], "AT+QPCMV=1,1\r"); 
+			if(err) return -1;
+			ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT);
+			cmds[count].flags |= ATQ_CMD_FLAG_IGNORE;
+			count++;
 		}
-		if(err) return -1;
 		
+		err = at_fill_generic_cmd(&cmds[count], "ATA\r");
+		if(err) return -1;
 		ATQ_CMD_INIT_DYNI(cmds[count], CMD_AT_A);
 		count++;
 	}
